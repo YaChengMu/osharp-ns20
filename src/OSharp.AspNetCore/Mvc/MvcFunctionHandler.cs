@@ -13,11 +13,11 @@ using System.Reflection;
 
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
 
 using OSharp.AspNetCore.Mvc.Filters;
 using OSharp.Core;
 using OSharp.Core.Functions;
-using OSharp.Dependency;
 using OSharp.Exceptions;
 using OSharp.Reflection;
 
@@ -32,11 +32,11 @@ namespace OSharp.AspNetCore.Mvc
         /// <summary>
         /// 初始化一个<see cref="FunctionHandlerBase{TFunction}"/>类型的新实例
         /// </summary>
-        public MvcFunctionHandler()
+        public MvcFunctionHandler(IServiceProvider serviceProvider)
+            : base(serviceProvider)
         {
-            IAllAssemblyFinder allAssemblyFinder = ServiceLocator.Instance.GetService<IAllAssemblyFinder>();
-            FunctionTypeFinder = new MvcControllerTypeFinder(allAssemblyFinder);
-            MethodInfoFinder = new PublicInstanceMethodInfoFinder();
+            FunctionTypeFinder = serviceProvider.GetService<IFunctionTypeFinder>();
+            MethodInfoFinder = new MvcMethodInfoFinder();
         }
 
         /// <summary>
@@ -60,16 +60,16 @@ namespace OSharp.AspNetCore.Mvc
             {
                 throw new OsharpException($"类型“{controllerType.FullName}”不是MVC控制器类型");
             }
-            FunctionAccessType accessType = controllerType.HasAttribute<LoginedAttribute>() || controllerType.HasAttribute<AuthorizeAttribute>()
-                ? FunctionAccessType.Logined
+            FunctionAccessType accessType = controllerType.HasAttribute<LoggedInAttribute>() || controllerType.HasAttribute<AuthorizeAttribute>()
+                ? FunctionAccessType.LoggedIn
                 : controllerType.HasAttribute<RoleLimitAttribute>()
                     ? FunctionAccessType.RoleLimit
-                    : FunctionAccessType.Anonymouse;
+                    : FunctionAccessType.Anonymous;
             Function function = new Function()
             {
                 Name = controllerType.GetDescription(),
                 Area = GetArea(controllerType),
-                Controller = controllerType.Name.Replace("Controller", string.Empty),
+                Controller = controllerType.Name.Replace("ControllerBase", string.Empty).Replace("Controller", string.Empty),
                 IsController = true,
                 AccessType = accessType
             };
@@ -84,10 +84,10 @@ namespace OSharp.AspNetCore.Mvc
         /// <returns></returns>
         protected override Function GetFunction(Function typeFunction, MethodInfo method)
         {
-            FunctionAccessType accessType = method.HasAttribute<LoginedAttribute>() || method.HasAttribute<AuthorizeAttribute>()
-                ? FunctionAccessType.Logined
+            FunctionAccessType accessType = method.HasAttribute<LoggedInAttribute>() || method.HasAttribute<AuthorizeAttribute>()
+                ? FunctionAccessType.LoggedIn
                 : method.HasAttribute<AllowAnonymousAttribute>()
-                    ? FunctionAccessType.Anonymouse
+                    ? FunctionAccessType.Anonymous
                     : method.HasAttribute<RoleLimitAttribute>()
                         ? FunctionAccessType.RoleLimit
                         : typeFunction.AccessType;
@@ -122,7 +122,7 @@ namespace OSharp.AspNetCore.Mvc
         /// </summary>
         private static string GetArea(Type type)
         {
-            AreaAttribute attribute = type.GetAttribute<AreaAttribute>(true);
+            AreaAttribute attribute = type.GetAttribute<AreaAttribute>();
             return attribute?.RouteValue;
         }
     }

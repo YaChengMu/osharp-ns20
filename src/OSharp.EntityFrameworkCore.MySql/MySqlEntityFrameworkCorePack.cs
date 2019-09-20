@@ -7,10 +7,11 @@
 //  <last-date>2018-06-23 15:24</last-date>
 // -----------------------------------------------------------------------
 
+using System;
 using System.ComponentModel;
+using System.Linq;
 
 using Microsoft.Extensions.DependencyInjection;
-
 using OSharp.Core.Packs;
 
 
@@ -20,7 +21,7 @@ namespace OSharp.Entity.MySql
     /// MySqlEntityFrameworkCore模块
     /// </summary>
     [Description("MySqlEntityFrameworkCore模块")]
-    public class MySqlEntityFrameworkCorePack : EntityFrameworkCorePack
+    public class MySqlEntityFrameworkCorePack : EntityFrameworkCorePackBase
     {
         /// <summary>
         /// 获取 模块级别
@@ -41,8 +42,24 @@ namespace OSharp.Entity.MySql
         {
             services = base.AddServices(services);
 
-            services.AddSingleton<IDbContextOptionsBuilderCreator, DbContextOptionsBuilderCreator>();
+            services.AddScoped(typeof(ISqlExecutor<,>), typeof(MySqlDapperSqlExecutor<,>));
+
             return services;
+        }
+
+        /// <summary>
+        /// 应用模块服务
+        /// </summary>
+        /// <param name="provider">服务提供者</param>
+        public override void UsePack(IServiceProvider provider)
+        {
+            bool? hasMySql = provider.GetOSharpOptions()?.DbContexts?.Values.Any(m => m.DatabaseType == DatabaseType.MySql);
+            if (hasMySql == null || !hasMySql.Value)
+            {
+                return;
+            }
+
+            base.UsePack(provider);
         }
     }
 }

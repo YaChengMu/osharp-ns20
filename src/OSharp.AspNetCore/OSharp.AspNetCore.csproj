@@ -15,8 +15,9 @@
     <DefineConstants>TRACE;DEBUG;NETSTANDARD2_0</DefineConstants>
   </PropertyGroup>
 
-  <Import Project="../../build/public.props" />
+  <Import Project="../../build/public.netstandard.props" />
   <Import Project="../../build/version.props" />
+
   <ItemGroup>
     <Compile Remove="Mvc\Extensions\**" />
     <EmbeddedResource Remove="Mvc\Extensions\**" />
@@ -25,7 +26,9 @@
   
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Diagnostics" Version="2.2.0" />
+    <PackageReference Include="Microsoft.AspNetCore.HttpsPolicy" Version="2.2.0" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc" Version="2.2.0" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR" Version="1.1.0" />
   </ItemGroup>
 
   <ItemGroup>

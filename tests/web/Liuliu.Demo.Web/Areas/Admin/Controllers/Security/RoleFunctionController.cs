@@ -34,12 +34,16 @@ namespace Liuliu.Demo.Web.Areas.Admin.Controllers
     public class RoleFunctionController : AdminApiController
     {
         private readonly RoleManager<Role> _roleManager;
+        private readonly IFilterService _filterService;
         private readonly SecurityManager _securityManager;
 
-        public RoleFunctionController(SecurityManager securityManager, RoleManager<Role> roleManager)
+        public RoleFunctionController(SecurityManager securityManager, 
+            RoleManager<Role> roleManager,
+            IFilterService filterService)
         {
             _securityManager = securityManager;
             _roleManager = roleManager;
+            _filterService = filterService;
         }
 
         /// <summary>
@@ -52,7 +56,7 @@ namespace Liuliu.Demo.Web.Areas.Admin.Controllers
         public PageData<RoleOutputDto2> Read(PageRequest request)
         {
             request.FilterGroup.Rules.Add(new FilterRule("IsLocked", false, FilterOperate.Equal));
-            Expression<Func<Role, bool>> predicate = FilterHelper.GetExpression<Role>(request.FilterGroup);
+            Expression<Func<Role, bool>> predicate = _filterService.GetExpression<Role>(request.FilterGroup);
             PageResult<RoleOutputDto2> page = _roleManager.Roles.ToPage<Role, RoleOutputDto2>(predicate, request.PageCondition);
             return page.ToPageData();
         }
@@ -60,13 +64,12 @@ namespace Liuliu.Demo.Web.Areas.Admin.Controllers
         /// <summary>
         /// 读取角色功能信息
         /// </summary>
-        /// <param name="roleId">角色编号</param>
         /// <returns>角色功能信息</returns>
         [HttpPost]
         [ModuleInfo]
         [DependOnFunction("Read")]
         [Description("读取功能")]
-        public PageData<FunctionOutputDto2> ReadFunctions(int roleId)
+        public PageData<FunctionOutputDto2> ReadFunctions(int roleId, [FromBody]PageRequest request)
         {
             if (roleId == 0)
             {
@@ -80,8 +83,7 @@ namespace Liuliu.Demo.Web.Areas.Admin.Controllers
                 return new PageData<FunctionOutputDto2>();
             }
 
-            PageRequest request = new PageRequest();
-            Expression<Func<Function, bool>> funcExp = FilterHelper.GetExpression<Function>(request.FilterGroup);
+            Expression<Func<Function, bool>> funcExp = _filterService.GetExpression<Function>(request.FilterGroup);
             funcExp = funcExp.And(m => functionIds.Contains(m.Id));
             if (request.PageCondition.SortConditions.Length == 0)
             {

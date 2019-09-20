@@ -25,7 +25,6 @@ using OSharp.Exceptions;
 using OSharp.Extensions;
 using OSharp.Filter;
 using OSharp.Json;
-using OSharp.Properties;
 using OSharp.Reflection;
 
 
@@ -43,7 +42,7 @@ namespace OSharp.Caching
         {
             Check.NotNullOrEmpty(key, nameof(key));
             Check.NotNull(value, nameof(value));
-            
+
             string json = value.ToJsonString();
             if (options == null)
             {
@@ -127,7 +126,7 @@ namespace OSharp.Caching
             Check.NotNullOrEmpty(key, nameof(key));
             Check.NotNull(value, nameof(value));
             Check.NotNull(function, nameof(function));
-            
+
             DistributedCacheEntryOptions options = function.ToCacheOptions();
             if (options == null)
             {
@@ -206,7 +205,7 @@ namespace OSharp.Caching
         public static TResult Get<TResult>(this IDistributedCache cache, string key, Func<TResult> getFunc, int cacheSeconds)
         {
             Check.GreaterThan(cacheSeconds, nameof(cacheSeconds), 0);
-            
+
             DistributedCacheEntryOptions options = new DistributedCacheEntryOptions();
             options.SetAbsoluteExpiration(TimeSpan.FromSeconds(cacheSeconds));
             return cache.Get<TResult>(key, getFunc, options);
@@ -254,30 +253,30 @@ namespace OSharp.Caching
         /// 查询分页数据结果，如缓存存在，直接返回，否则从数据源查找分页结果，并存入缓存中再返回
         /// </summary>
         public static PageResult<TResult> ToPageCache<TEntity, TResult>(this IQueryable<TEntity> source,
-            Expression<Func<TEntity, bool>> pridicate,
+            Expression<Func<TEntity, bool>> predicate,
             PageCondition pageCondition,
             Expression<Func<TEntity, TResult>> selector,
             int cacheSeconds = 60,
             params object[] keyParams)
         {
             IDistributedCache cache = ServiceLocator.Instance.GetService<IDistributedCache>();
-            string key = GetKey(source, pridicate, pageCondition, selector, keyParams);
-            return cache.Get(key, () => source.ToPage(pridicate, pageCondition, selector), cacheSeconds);
+            string key = GetKey(source, predicate, pageCondition, selector, keyParams);
+            return cache.Get(key, () => source.ToPage(predicate, pageCondition, selector), cacheSeconds);
         }
 
         /// <summary>
         /// 查询分页数据结果，如缓存存在，直接返回，否则从数据源查找分页结果，并存入缓存中再返回
         /// </summary>
         public static PageResult<TResult> ToPageCache<TEntity, TResult>(this IQueryable<TEntity> source,
-            Expression<Func<TEntity, bool>> pridicate,
+            Expression<Func<TEntity, bool>> predicate,
             PageCondition pageCondition,
             Expression<Func<TEntity, TResult>> selector,
             IFunction function,
             params object[] keyParams)
         {
             IDistributedCache cache = ServiceLocator.Instance.GetService<IDistributedCache>();
-            string key = GetKey(source, pridicate, pageCondition, selector, keyParams);
-            return cache.Get(key, () => source.ToPage(pridicate, pageCondition, selector), function);
+            string key = GetKey(source, predicate, pageCondition, selector, keyParams);
+            return cache.Get(key, () => source.ToPage(predicate, pageCondition, selector), function);
         }
 
         /// <summary>

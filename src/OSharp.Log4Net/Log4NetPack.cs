@@ -11,7 +11,7 @@ namespace OSharp.Log4Net
     /// <summary>
     /// Log4Net模块
     /// </summary>
-    [Description("Log4Net模块")]
+    [Description("Log4Net日志模块")]
     public class Log4NetPack : OsharpPack
     {
         /// <summary>
@@ -33,7 +33,6 @@ namespace OSharp.Log4Net
         public override IServiceCollection AddServices(IServiceCollection services)
         {
             services.AddSingleton<ILoggerProvider, Log4NetLoggerProvider>();
-
             return services;
         }
     }

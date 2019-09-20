@@ -8,11 +8,9 @@
 // -----------------------------------------------------------------------
 
 using System;
-using System.Linq;
 
 using Liuliu.Demo.Identity.Entities;
 
-using OSharp.Dependency;
 using OSharp.Entity;
 using OSharp.Mapping;
 
@@ -25,6 +23,18 @@ namespace Liuliu.Demo.Identity.Dtos
     [MapFrom(typeof(UserRole))]
     public class UserRoleOutputDto : IOutputDto, IDataAuthEnabled
     {
+        /// <summary>
+        /// 初始化一个<see cref="UserRoleOutputDto"/>类型的新实例
+        /// </summary>
+        public UserRoleOutputDto(UserRole ur)
+        {
+            Id = ur.Id;
+            UserId = ur.UserId;
+            RoleId = ur.RoleId;
+            IsLocked = ur.IsLocked;
+            CreatedTime = ur.CreatedTime;
+        }
+
         /// <summary>
         /// 获取或设置 编号
         /// </summary>
@@ -53,26 +63,12 @@ namespace Liuliu.Demo.Identity.Dtos
         /// <summary>
         /// 获取或设置 用户名
         /// </summary>
-        public string UserName
-        {
-            get
-            {
-                IIdentityContract contract = ServiceLocator.Instance.GetService<IIdentityContract>();
-                return contract.Users.Where(m => m.Id == UserId).Select(m => m.UserName).FirstOrDefault();
-            }
-        }
+        public string UserName { get; set; }
 
         /// <summary>
         /// 获取或设置 角色名
         /// </summary>
-        public string RoleName
-        {
-            get
-            {
-                IIdentityContract contract = ServiceLocator.Instance.GetService<IIdentityContract>();
-                return contract.Roles.Where(m => m.Id == RoleId).Select(m => m.Name).FirstOrDefault();
-            }
-        }
+        public string RoleName { get; set; }
 
         #region Implementation of IDataAuthEnabled
 

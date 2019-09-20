@@ -18,9 +18,8 @@ using OSharp.Audits;
 using OSharp.Core.Functions;
 using OSharp.Dependency;
 using OSharp.Entity;
-using OSharp.Exceptions;
-using OSharp.Secutiry;
-using OSharp.Secutiry.Claims;
+using OSharp.Security;
+using OSharp.Security.Claims;
 
 
 namespace OSharp.AspNetCore.Mvc.Filters

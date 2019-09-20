@@ -8,21 +8,24 @@
 // -----------------------------------------------------------------------
 
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Text;
+using System.Threading.Tasks;
 
 using Liuliu.Demo.Identity.Entities;
 
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Tokens;
 
-using OSharp.Data;
+using OSharp.Core.Options;
 using OSharp.Exceptions;
 using OSharp.Extensions;
 using OSharp.Identity;
@@ -64,12 +67,12 @@ namespace Liuliu.Demo.Identity
             return options =>
             {
                 //登录
-                options.SignIn.RequireConfirmedEmail = true;
+                options.SignIn.RequireConfirmedEmail = false;
                 //密码
                 options.Password.RequireNonAlphanumeric = false;
                 options.Password.RequireUppercase = false;
                 //用户
-                options.User.RequireUniqueEmail = true;
+                options.User.RequireUniqueEmail = false;
                 //锁定
                 options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
             };
@@ -97,33 +100,104 @@ namespace Liuliu.Demo.Identity
         /// <param name="services">服务集合</param>
         protected override void AddAuthentication(IServiceCollection services)
         {
-            IConfiguration configuration = Singleton<IConfiguration>.Instance;
-            services.AddAuthentication(options =>
+            IConfiguration configuration = services.GetConfiguration();
+
+            // JwtBearer
+            AuthenticationBuilder authenticationBuilder = services.AddAuthentication(options =>
             {
                 options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
                 options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-            }).AddJwtBearer(jwt =>
+            });
+            services.TryAddScoped<IJwtBearerService, JwtBearerService<User, int>>();
+            services.TryAddScoped<IAccessClaimsProvider, AccessClaimsProvider<User, int>>();
+            authenticationBuilder.AddJwtBearer(jwt =>
             {
                 string secret = configuration["OSharp:Jwt:Secret"];
                 if (secret.IsNullOrEmpty())
                 {
-                    throw new OsharpException("配置文件中Jwt节点的Secret不能为空");
+                    throw new OsharpException("配置文件中OSharp配置的Jwt节点的Secret不能为空");
                 }
+
                 jwt.TokenValidationParameters = new TokenValidationParameters()
                 {
-                    ValidIssuer = configuration["OSharp:Jwt:Issuer"],
-                    ValidAudience = configuration["OSharp:Jwt:Audience"],
-                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(secret))
+                    ValidIssuer = configuration["OSharp:Jwt:Issuer"] ?? "osharp identity",
+                    ValidAudience = configuration["OSharp:Jwt:Audience"] ?? "osharp client",
+                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret)),
+                    LifetimeValidator = (nbf, exp, token, param) => exp > DateTime.UtcNow
                 };
 
-                jwt.SecurityTokenValidators.Clear();
-                jwt.SecurityTokenValidators.Add(new OnlineUserJwtSecurityTokenHandler());
-            //}).AddQQ(qq =>
-            //{
-            //    qq.AppId = configuration["Authentication:QQ:AppId"];
-            //    qq.AppKey = configuration["Authentication:QQ:AppKey"];
-            //    qq.CallbackPath = new PathString("/api/identity/OAuth2Callback");
+                jwt.Events = new JwtBearerEvents()
+                {
+                    OnMessageReceived = context =>
+                    {
+                        // 生成SignalR的用户信息
+                        string token = context.Request.Query["access_token"];
+                        string path = context.HttpContext.Request.Path;
+                        if (!string.IsNullOrEmpty(token) && path.Contains("hub"))
+                        {
+                            context.Token = token;
+                        }
+                        return Task.CompletedTask;
+                    },
+                    OnAuthenticationFailed = context =>
+                    {
+                        if (context.Exception.GetType() == typeof(SecurityTokenExpiredException))
+                        {
+                            context.Response.Headers.Add("Token-Expired", "true");
+                        }
+                        return Task.CompletedTask;
+                    }
+                };
             });
+
+            // OAuth2
+            IConfigurationSection section = configuration.GetSection("OSharp:OAuth2");
+            IDictionary<string, OAuth2Options> dict = section.Get<Dictionary<string, OAuth2Options>>();
+            if (dict == null)
+            {
+                return;
+            }
+            foreach (KeyValuePair<string, OAuth2Options> pair in dict)
+            {
+                OAuth2Options value = pair.Value;
+                if (!value.Enabled)
+                {
+                    continue;
+                }
+                if (string.IsNullOrEmpty(value.ClientId))
+                {
+                    throw new OsharpException($"配置文件中OSharp:OAuth2配置的{pair.Key}节点的ClientId不能为空");
+                }
+                if (string.IsNullOrEmpty(value.ClientSecret))
+                {
+                    throw new OsharpException($"配置文件中OSharp:OAuth2配置的{pair.Key}节点的ClientSecret不能为空");
+                }
+
+                switch (pair.Key)
+                {
+                    case "QQ":
+                        authenticationBuilder.AddQQ(opts =>
+                        {
+                            opts.AppId = value.ClientId;
+                            opts.AppKey = value.ClientSecret;
+                        });
+                        break;
+                    case "Microsoft":
+                        authenticationBuilder.AddMicrosoftAccount(opts =>
+                        {
+                            opts.ClientId = value.ClientId;
+                            opts.ClientSecret = value.ClientSecret;
+                        });
+                        break;
+                    case "GitHub":
+                        authenticationBuilder.AddGitHub(opts =>
+                        {
+                            opts.ClientId = value.ClientId;
+                            opts.ClientSecret = value.ClientSecret;
+                        });
+                        break;
+                }
+            }
         }
 
         /// <summary>

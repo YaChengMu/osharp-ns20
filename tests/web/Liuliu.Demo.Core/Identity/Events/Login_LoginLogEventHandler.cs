@@ -13,7 +13,6 @@ using System.Threading.Tasks;
 
 using Liuliu.Demo.Identity.Entities;
 
-using OSharp.Dependency;
 using OSharp.Entity;
 using OSharp.EventBuses;
 
@@ -23,7 +22,7 @@ namespace Liuliu.Demo.Identity.Events
     /// <summary>
     /// 用户登录事件：登录日志
     /// </summary>
-    public class LoginLoginLogEventHandler : EventHandlerBase<LoginEventData>, ITransientDependency
+    public class LoginLoginLogEventHandler : EventHandlerBase<LoginEventData>
     {
         private readonly IRepository<LoginLog, Guid> _loginLogRepository;
 

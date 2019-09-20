@@ -28,6 +28,7 @@ using OSharp.AspNetCore.Mvc.Filters;
 using OSharp.AspNetCore.UI;
 using OSharp.Caching;
 using OSharp.Collections;
+using OSharp.Core;
 using OSharp.Core.Functions;
 using OSharp.Core.Modules;
 using OSharp.Data;
@@ -44,16 +45,22 @@ namespace Liuliu.Demo.Web.Areas.Admin.Controllers
     public class RoleController : AdminApiController
     {
         private readonly IIdentityContract _identityContract;
+        private readonly ICacheService _cacheService;
+        private readonly IFilterService _filterService;
         private readonly RoleManager<Role> _roleManager;
         private readonly SecurityManager _securityManager;
 
         public RoleController(RoleManager<Role> roleManager,
             SecurityManager securityManager,
-            IIdentityContract identityContract)
+            IIdentityContract identityContract,
+            ICacheService cacheService,
+            IFilterService filterService)
         {
             _roleManager = roleManager;
             _securityManager = securityManager;
             _identityContract = identityContract;
+            _cacheService = cacheService;
+            _filterService = filterService;
         }
 
         /// <summary>
@@ -68,8 +75,8 @@ namespace Liuliu.Demo.Web.Areas.Admin.Controllers
             Check.NotNull(request, nameof(request));
             IFunction function = this.GetExecuteFunction();
 
-            Expression<Func<Role, bool>> predicate = request.FilterGroup.ToExpression<Role>();
-            var page = _roleManager.Roles.ToPageCache<Role, RoleOutputDto>(predicate, request.PageCondition, function);
+            Expression<Func<Role, bool>> predicate = _filterService.GetExpression<Role>(request.FilterGroup);
+            var page = _cacheService.ToPageCache<Role, RoleOutputDto>(_roleManager.Roles, predicate, request.PageCondition, function);
 
             return page.ToPageData();
         }
@@ -79,13 +86,14 @@ namespace Liuliu.Demo.Web.Areas.Admin.Controllers
         /// </summary>
         /// <returns>角色节点列表</returns>
         [HttpGet]
+        [ModuleInfo]
         [Description("读取节点")]
         public RoleNode[] ReadNode()
         {
             IFunction function = this.GetExecuteFunction();
             Expression<Func<Role, bool>> exp = m => !m.IsLocked;
 
-            RoleNode[] nodes = _roleManager.Roles.ToCacheArray(exp, m => new RoleNode()
+            RoleNode[] nodes = _cacheService.ToCacheArray(_roleManager.Roles, exp, m => new RoleNode()
             {
                 RoleId = m.Id,
                 RoleName = m.Name
@@ -119,7 +127,7 @@ namespace Liuliu.Demo.Web.Areas.Admin.Controllers
         [HttpPost]
         [ModuleInfo]
         [DependOnFunction("Read")]
-        [ServiceFilter(typeof(UnitOfWorkAttribute))]
+        [UnitOfWork]
         [Description("新增")]
         public async Task<AjaxResult> Create(RoleInputDto[] dtos)
         {
@@ -146,7 +154,7 @@ namespace Liuliu.Demo.Web.Areas.Admin.Controllers
         [HttpPost]
         [ModuleInfo]
         [DependOnFunction("Read")]
-        [ServiceFilter(typeof(UnitOfWorkAttribute))]
+        [UnitOfWork]
         [Description("更新")]
         public async Task<AjaxResult> Update(RoleInputDto[] dtos)
         {
@@ -174,7 +182,7 @@ namespace Liuliu.Demo.Web.Areas.Admin.Controllers
         [HttpPost]
         [ModuleInfo]
         [DependOnFunction("Read")]
-        [ServiceFilter(typeof(UnitOfWorkAttribute))]
+        [UnitOfWork]
         [Description("删除")]
         public async Task<AjaxResult> Delete(int[] ids)
         {
@@ -202,9 +210,9 @@ namespace Liuliu.Demo.Web.Areas.Admin.Controllers
         [ModuleInfo]
         [DependOnFunction("Read")]
         [DependOnFunction("ReadRoleModules", Controller = "Module")]
-        [ServiceFilter(typeof(UnitOfWorkAttribute))]
+        [UnitOfWork]
         [Description("设置模块")]
-        public async Task<ActionResult> SetModules([FromBody] RoleSetModuleDto dto)
+        public async Task<ActionResult> SetModules(RoleSetModuleDto dto)
         {
             OperationResult result = await _securityManager.SetRoleModules(dto.RoleId, dto.ModuleIds);
             return Json(result.ToAjaxResult());

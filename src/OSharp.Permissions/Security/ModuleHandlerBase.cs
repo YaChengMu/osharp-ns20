@@ -10,6 +10,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -33,17 +34,17 @@ namespace OSharp.Security
         where TModuleKey : struct, IEquatable<TModuleKey>
         where TModuleFunction : ModuleFunctionBase<TModuleKey>
     {
-        private readonly ServiceLocator _locator;
+        private readonly IServiceProvider _serviceProvider;
         private readonly IModuleInfoPicker _moduleInfoPicker;
 
         /// <summary>
         /// 初始化一个<see cref="ModuleHandlerBase{TModule, TModuleInputDto, TModuleKey, TModuleFunction}"/>类型的新实例
         /// </summary>
-        protected ModuleHandlerBase()
+        protected ModuleHandlerBase(IServiceProvider serviceProvider)
         {
-            _locator = ServiceLocator.Instance;
-            _moduleInfoPicker = _locator.GetService<IModuleInfoPicker>();
-            Logger = _locator.GetLogger(GetType());
+            _serviceProvider = serviceProvider;
+            _moduleInfoPicker = serviceProvider.GetService<IModuleInfoPicker>();
+            Logger = serviceProvider.GetLogger(GetType());
         }
 
         /// <summary>
@@ -61,7 +62,7 @@ namespace OSharp.Security
             {
                 return;
             }
-            _locator.ExcuteScopedWork(provider =>
+            _serviceProvider.ExecuteScopedWork(provider =>
             {
                 SyncToDatabase(provider, moduleInfos);
             });
@@ -111,11 +112,10 @@ namespace OSharp.Security
                 .Except(new[] { "Root" })
                 .ToArray();
             TModuleKey[] deleteModuleIds = positionModules.Where(m => deletePositions.Contains(m.Position)).Select(m => m.Id).ToArray();
-            OperationResult result;
             foreach (TModuleKey id in deleteModuleIds)
             {
-                result = moduleStore.DeleteModule(id).Result;
-                if (result.Errored)
+                OperationResult result = moduleStore.DeleteModule(id).GetAwaiter().GetResult();
+                if (result.Error)
                 {
                     throw new OsharpException(result.Message);
                 }
@@ -138,8 +138,8 @@ namespace OSharp.Security
                     string parentCode = info.Position.Substring(lastIndex + 1, info.Position.Length - lastIndex - 1);
                     ModuleInfo parentInfo = new ModuleInfo() { Code = parentCode, Name = info.PositionName ?? parentCode, Position = parent1Position };
                     TModuleInputDto dto = GetDto(parentInfo, parent1, null);
-                    result = moduleStore.CreateModule(dto).Result;
-                    if (result.Errored)
+                    OperationResult result = moduleStore.CreateModule(dto).GetAwaiter().GetResult();
+                    if (result.Error)
                     {
                         throw new OsharpException(result.Message);
                     }
@@ -150,8 +150,8 @@ namespace OSharp.Security
                 if (module == null)
                 {
                     TModuleInputDto dto = GetDto(info, parent, null);
-                    result = moduleStore.CreateModule(dto).Result;
-                    if (result.Errored)
+                    OperationResult result = moduleStore.CreateModule(dto).GetAwaiter().GetResult();
+                    if (result.Error)
                     {
                         throw new OsharpException(result.Message);
                     }
@@ -160,8 +160,8 @@ namespace OSharp.Security
                 else //更新模块
                 {
                     TModuleInputDto dto = GetDto(info, parent, module);
-                    result = moduleStore.UpdateModule(dto).Result;
-                    if (result.Errored)
+                    OperationResult result = moduleStore.UpdateModule(dto).GetAwaiter().GetResult();
+                    if (result.Error)
                     {
                         throw new OsharpException(result.Message);
                     }
@@ -169,8 +169,8 @@ namespace OSharp.Security
                 if (info.DependOnFunctions.Length > 0)
                 {
                     Guid[] functionIds = info.DependOnFunctions.Select(m => m.Id).ToArray();
-                    result = moduleFunctionStore.SetModuleFunctions(module.Id, functionIds).Result;
-                    if (result.Errored)
+                    OperationResult result = moduleFunctionStore.SetModuleFunctions(module.Id, functionIds).GetAwaiter().GetResult();
+                    if (result.Error)
                     {
                         throw new OsharpException(result.Message);
                     }

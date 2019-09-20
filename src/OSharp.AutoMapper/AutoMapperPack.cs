@@ -15,6 +15,7 @@ using AutoMapper;
 using AutoMapper.Configuration;
 
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 using OSharp.Core.Packs;
 using OSharp.Mapping;
@@ -42,12 +43,7 @@ namespace OSharp.AutoMapper
         /// <returns></returns>
         public override IServiceCollection AddServices(IServiceCollection services)
         {
-            services.AddSingleton(new MapperConfigurationExpression());
-
-            services.AddSingleton<IMapFromAttributeTypeFinder, MapFromAttributeTypeFinder>();
-            services.AddSingleton<IMapToAttributeTypeFinder, MapToAttributeTypeFinder>();
-            services.AddSingleton<IMapTuple, MapTupleProfile>();
-            services.AddSingleton<IMapper, AutoMapperMapper>();
+            services.TryAddSingleton<MapperConfigurationExpression>(new MapperConfigurationExpression());
 
             return services;
         }
@@ -58,14 +54,7 @@ namespace OSharp.AutoMapper
         /// <param name="provider">服务提供者</param>
         public override void UsePack(IServiceProvider provider)
         {
-            MapperConfigurationExpression cfg = provider.GetService<MapperConfigurationExpression>() ?? new MapperConfigurationExpression();
-
-            //各个模块DTO的 IAutoMapperConfiguration 映射实现类
-            IAutoMapperConfiguration[] configs = provider.GetServices<IAutoMapperConfiguration>().ToArray();
-            foreach (IAutoMapperConfiguration config in configs)
-            {
-                config.CreateMaps(cfg);
-            }
+            MapperConfigurationExpression cfg = provider.GetService<MapperConfigurationExpression>();
 
             //获取已注册到IoC的所有Profile
             IMapTuple[] tuples = provider.GetServices<IMapTuple>().ToArray();
@@ -75,9 +64,16 @@ namespace OSharp.AutoMapper
                 cfg.AddProfile(mapTuple as Profile);
             }
 
-            Mapper.Initialize(cfg);
+            //各个模块DTO的 IAutoMapperConfiguration 映射实现类
+            IAutoMapperConfiguration[] configs = provider.GetServices<IAutoMapperConfiguration>().ToArray();
+            foreach (IAutoMapperConfiguration config in configs)
+            {
+                config.CreateMaps(cfg);
+            }
 
-            IMapper mapper = provider.GetService<IMapper>();
+            MapperConfiguration configuration = new MapperConfiguration(cfg);
+
+            IMapper mapper = new AutoMapperMapper(configuration);
             MapperExtensions.SetMapper(mapper);
 
             IsEnabled = true;

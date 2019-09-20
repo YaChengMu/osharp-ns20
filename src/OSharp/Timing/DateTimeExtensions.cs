@@ -48,18 +48,19 @@ namespace OSharp.Timing
         /// <returns></returns>
         public static string ToUniqueString(this DateTime dateTime, bool milsec = false)
         {
-            int sedonds = dateTime.Hour * 3600 + dateTime.Minute * 60 + dateTime.Second;
-            string value = string.Format("{0}{1}{2}", dateTime.ToString("yy"), dateTime.DayOfYear, sedonds);
+            int seconds = dateTime.Hour * 3600 + dateTime.Minute * 60 + dateTime.Second;
+            string value = $"{dateTime:yy}{dateTime.DayOfYear}{seconds}";
             return milsec ? value + dateTime.ToString("fff") : value;
         }
 
         /// <summary>
         /// 将时间转换为JS时间格式(Date.getTime())
         /// </summary>
-        public static string ToJsGetTime(this DateTime dateTime)
+        public static string ToJsGetTime(this DateTime dateTime, bool milsec = true)
         {
             DateTime utc = dateTime.ToUniversalTime();
-            return ((long)utc.Subtract(new DateTime(1970, 1, 1)).TotalMilliseconds).ToString();
+            TimeSpan span = utc.Subtract(new DateTime(1970, 1, 1));
+            return Math.Round(milsec ? span.TotalMilliseconds : span.TotalSeconds).ToString();
         }
     }
 }

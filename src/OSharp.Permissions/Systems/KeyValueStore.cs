@@ -47,10 +47,7 @@ namespace OSharp.Systems
         /// <summary>
         /// 获取 键值对数据查询数据集
         /// </summary>
-        public IQueryable<KeyValue> KeyValues
-        {
-            get { return _keyValueRepository.Query(); }
-        }
+        public IQueryable<KeyValue> KeyValues => _keyValueRepository.Query();
 
         /// <summary>
         /// 获取或创建设置信息
@@ -93,7 +90,7 @@ namespace OSharp.Systems
         public IKeyValue GetKeyValue(string key)
         {
             const int seconds = 60 * 1000;
-            KeyValue[] pairs = _cache.Get(AllKeyValuesKey, () => _keyValueRepository.Query().ToArray(), seconds);
+            KeyValue[] pairs = _cache.Get(AllKeyValuesKey, () => _keyValueRepository.Query(null, false).ToArray(), seconds);
             return pairs.FirstOrDefault(m => m.Key == key);
         }
 
@@ -158,7 +155,7 @@ namespace OSharp.Systems
         public async Task<OperationResult> DeleteKeyValues(params Guid[] ids)
         {
             OperationResult result = await _keyValueRepository.DeleteAsync(ids);
-            if (result.Successed)
+            if (result.Succeeded)
             {
                 await _cache.RemoveAsync(AllKeyValuesKey);
             }
