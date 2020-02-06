@@ -1,10 +1,10 @@
 ﻿// -----------------------------------------------------------------------
 //  <copyright file="NodeNoFoundHandlerMiddleware.cs" company="OSharp开源团队">
-//      Copyright (c) 2014-2018 OSharp. All rights reserved.
+//      Copyright (c) 2014-2019 OSharp. All rights reserved.
 //  </copyright>
 //  <site>http://www.osharp.org</site>
 //  <last-editor>郭明锋</last-editor>
-//  <last-date>2018-05-18 11:34</last-date>
+//  <last-date>2019-10-30 22:15</last-date>
 // -----------------------------------------------------------------------
 
 using System;
@@ -12,8 +12,6 @@ using System.IO;
 using System.Threading.Tasks;
 
 using Microsoft.AspNetCore.Http;
-
-using OSharp.Data;
 
 
 namespace OSharp.AspNetCore
@@ -30,8 +28,6 @@ namespace OSharp.AspNetCore
         /// </summary>
         public NodeNoFoundHandlerMiddleware(RequestDelegate next)
         {
-            Check.NotNull(next, nameof(next));
-
             _next = next;
         }
 
@@ -40,7 +36,7 @@ namespace OSharp.AspNetCore
         /// </summary>
         /// <param name="context">Http上下文</param>
         /// <returns></returns>
-        public async Task Invoke(HttpContext context)
+        public async Task InvokeAsync(HttpContext context)
         {
             await _next(context);
             if (context.Response.StatusCode == 404 && !Path.HasExtension(context.Request.Path.Value)

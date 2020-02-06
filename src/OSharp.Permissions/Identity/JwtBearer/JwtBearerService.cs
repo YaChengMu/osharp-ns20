@@ -41,7 +41,6 @@ namespace OSharp.Identity.JwtBearer
         where TUserKey : IEquatable<TUserKey>
     {
         private readonly JwtOptions _jwtOptions;
-        private readonly ILogger _logger;
         private readonly IServiceProvider _provider;
         private readonly JwtSecurityTokenHandler _tokenHandler = new JwtSecurityTokenHandler();
 
@@ -51,7 +50,6 @@ namespace OSharp.Identity.JwtBearer
         public JwtBearerService(IServiceProvider provider)
         {
             _provider = provider;
-            _logger = provider.GetLogger(GetType());
             _jwtOptions = _provider.GetOSharpOptions().Jwt;
         }
 
@@ -60,53 +58,11 @@ namespace OSharp.Identity.JwtBearer
         /// </summary>
         /// <param name="userId">用户编号的字符串</param>
         /// <param name="userName">用户名的字符串</param>
-        /// <param name="clientId">关联的客户端标识</param>
+        /// <param name="clientType">客户端类型</param>
         /// <returns>JwtToken信息</returns>
-        public virtual async Task<JsonWebToken> CreateToken(string userId, string userName, string clientId = null)
+        public Task<JsonWebToken> CreateToken(string userId, string userName, RequestClientType clientType = RequestClientType.Browser)
         {
-            Check.NotNullOrEmpty(userId, nameof(userId));
-            Check.NotNullOrEmpty(userName, nameof(userName));
-
-            // New RefreshToken
-            clientId = clientId ?? Guid.NewGuid().ToString();
-            Claim[] claims =
-            {
-                new Claim(ClaimTypes.NameIdentifier, userId),
-                new Claim(ClaimTypes.Name, userName),
-                new Claim("clientId", clientId)
-            };
-            var (token, expires) = CreateToken(claims, _jwtOptions, JwtTokenType.RefreshToken);
-            string refreshTokenStr = token;
-            await _provider.ExecuteScopedWorkAsync(async provider =>
-                {
-                    UserManager<TUser> userManager = provider.GetService<UserManager<TUser>>();
-                    RefreshToken refreshToken = new RefreshToken() { ClientId = clientId, Value = refreshTokenStr, EndUtcTime = expires };
-                    var result = await userManager.SetRefreshToken(userId, refreshToken);
-                    if (result.Succeeded)
-                    {
-                        IUnitOfWork unitOfWork = provider.GetUnitOfWork<TUser, TUserKey>();
-                        unitOfWork.Commit();
-                        IEventBus eventBus = _provider.GetService<IEventBus>();
-                        OnlineUserCacheRemoveEventData eventData = new OnlineUserCacheRemoveEventData() { UserNames = new[] { userName } };
-                        eventBus.Publish(eventData);
-                    }
-                    return result;
-                },
-                false);
-
-            // New AccessToken
-            IAccessClaimsProvider claimsProvider = _provider.GetService<IAccessClaimsProvider>();
-            claims = await claimsProvider.CreateClaims(userId);
-            List<Claim> claimList = claims.ToList();
-            claimList.Add(new Claim("clientId", clientId));
-            (token, _) = CreateToken(claimList, _jwtOptions, JwtTokenType.AccessToken);
-
-            return new JsonWebToken()
-            {
-                AccessToken = token,
-                RefreshToken = refreshTokenStr,
-                RefreshUctExpires = expires.ToJsGetTime().CastTo<long>(0)
-            };
+            return CreateToken(userId, userName, clientType, null);
         }
 
         /// <summary>
@@ -135,11 +91,14 @@ namespace OSharp.Identity.JwtBearer
                 throw new OsharpException("RefreshToken 的数据中无法找到 UserId 声明");
             }
 
+            RequestClientType? clientType = jwtSecurityToken.Claims.FirstOrDefault(m => m.Type == "clientType")?.Value.CastTo<RequestClientType>()
+                ?? RequestClientType.Browser;
+
             UserManager<TUser> userManager = _provider.GetService<UserManager<TUser>>();
-            RefreshToken tokenModel = await userManager.GetRefreshToken(userId, clientId);
-            if (tokenModel == null || tokenModel.Value != refreshToken || tokenModel.EndUtcTime <= DateTime.UtcNow)
+            RefreshToken existRefreshToken = await userManager.GetRefreshToken(userId, clientId);
+            if (existRefreshToken == null || existRefreshToken.Value != refreshToken || existRefreshToken.EndUtcTime <= DateTime.UtcNow)
             {
-                if (tokenModel != null && tokenModel.EndUtcTime <= DateTime.UtcNow)
+                if (existRefreshToken != null && existRefreshToken.EndUtcTime <= DateTime.UtcNow)
                 {
                     //删除过期的Token
                     await _provider.ExecuteScopedWorkAsync(async provider =>
@@ -159,7 +118,7 @@ namespace OSharp.Identity.JwtBearer
                 throw new OsharpException("RefreshToken 不存在或已过期");
             }
 
-            ClaimsPrincipal principal = _tokenHandler.ValidateToken(refreshToken, parameters, out SecurityToken securityToken);
+            ClaimsPrincipal principal = _tokenHandler.ValidateToken(refreshToken, parameters, out _);
 
             string userName = principal.Claims.FirstOrDefault(m => m.Type == ClaimTypes.Name)?.Value;
             if (userName == null)
@@ -167,11 +126,60 @@ namespace OSharp.Identity.JwtBearer
                 throw new OsharpException("RefreshToken 的数据中无法找到 UserName 声明");
             }
 
-            JsonWebToken token = await CreateToken(userId, userName, clientId);
+            JsonWebToken token = await CreateToken(userId, userName, clientType.Value, existRefreshToken);
             return token;
         }
 
-        private (string, DateTime) CreateToken(IEnumerable<Claim> claims, JwtOptions options, JwtTokenType tokenType)
+        private async Task<JsonWebToken> CreateToken(string userId, string userName, RequestClientType clientType, RefreshToken refreshToken)
+        {
+            Check.NotNullOrEmpty(userId, nameof(userId));
+            Check.NotNullOrEmpty(userName, nameof(userName));
+
+            // New RefreshToken
+            string clientId = refreshToken?.ClientId ?? Guid.NewGuid().ToString();
+            Claim[] claims =
+            {
+                new Claim(ClaimTypes.NameIdentifier, userId),
+                new Claim(ClaimTypes.Name, userName),
+                new Claim("clientId", clientId),
+                new Claim("clientType", clientType.ToString())
+            };
+            var (token, expires) = CreateToken(claims, _jwtOptions, JwtTokenType.RefreshToken, refreshToken);
+            string refreshTokenStr = token;
+            await _provider.ExecuteScopedWorkAsync(async provider =>
+            {
+                UserManager<TUser> userManager = provider.GetService<UserManager<TUser>>();
+                refreshToken = new RefreshToken() { ClientId = clientId, Value = refreshTokenStr, EndUtcTime = expires };
+                var result = await userManager.SetRefreshToken(userId, refreshToken);
+                if (result.Succeeded)
+                {
+                    IUnitOfWork unitOfWork = provider.GetUnitOfWork<TUser, TUserKey>();
+                    unitOfWork.Commit();
+                    IEventBus eventBus = _provider.GetService<IEventBus>();
+                    OnlineUserCacheRemoveEventData eventData = new OnlineUserCacheRemoveEventData() { UserNames = new[] { userName } };
+                    eventBus.Publish(eventData);
+                }
+                return result;
+            },
+                false);
+
+            // New AccessToken
+            IAccessClaimsProvider claimsProvider = _provider.GetService<IAccessClaimsProvider>();
+            claims = await claimsProvider.CreateClaims(userId);
+            List<Claim> claimList = claims.ToList();
+            claimList.Add(new Claim("clientId", clientId));
+            claimList.Add(new Claim("clientType", clientType.ToString()));
+            (token, _) = CreateToken(claimList, _jwtOptions, JwtTokenType.AccessToken);
+
+            return new JsonWebToken()
+            {
+                AccessToken = token,
+                RefreshToken = refreshTokenStr,
+                RefreshUctExpires = expires.ToJsGetTime().CastTo<long>(0)
+            };
+        }
+
+        private (string, DateTime) CreateToken(IEnumerable<Claim> claims, JwtOptions options, JwtTokenType tokenType, RefreshToken refreshToken = null)
         {
             string secret = options.Secret;
             if (secret == null)
@@ -179,13 +187,33 @@ namespace OSharp.Identity.JwtBearer
                 throw new OsharpException("创建JwtToken时Secret为空，请在OSharp:Jwt:Secret节点中进行配置");
             }
 
+            DateTime expires;
+            DateTime now = DateTime.UtcNow;
+            if (tokenType == JwtTokenType.AccessToken)
+            {
+                if (refreshToken != null)
+                {
+                    throw new OsharpException("创建 AccessToken 时不需要 refreshToken");
+                }
+
+                double minutes = options.AccessExpireMins > 0 ? options.AccessExpireMins : 5; //默认5分钟
+                expires = now.AddMinutes(minutes);
+            }
+            else
+            {
+                if (refreshToken == null)
+                {
+                    double minutes = options.RefreshExpireMins > 0 ? options.RefreshExpireMins : 10080; // 默认7天
+                    expires = now.AddMinutes(minutes);
+                }
+                else
+                {
+                    expires = refreshToken.EndUtcTime;
+                }
+            }
             SecurityKey key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
             SigningCredentials credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256Signature);
-            DateTime now = DateTime.UtcNow;
-            double minutes = tokenType == JwtTokenType.AccessToken
-                ? options.AccessExpireMins > 0 ? options.AccessExpireMins : 5 //默认5分钟
-                : options.RefreshExpireMins > 0 ? options.RefreshExpireMins : 10080; // 默认7天
-            DateTime expires = now.AddMinutes(minutes);
+
             SecurityTokenDescriptor descriptor = new SecurityTokenDescriptor()
             {
                 Subject = new ClaimsIdentity(claims),

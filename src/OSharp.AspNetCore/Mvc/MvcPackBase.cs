@@ -8,6 +8,7 @@
 // -----------------------------------------------------------------------
 
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Internal;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -38,6 +39,18 @@ namespace OSharp.AspNetCore.Mvc
         /// <returns></returns>
         public override IServiceCollection AddServices(IServiceCollection services)
         {
+            services = AddCors(services);
+#if NETCOREAPP
+            services.AddControllersWithViews(options =>
+            {
+                options.Conventions.Add(new DashedRoutingConvention());
+                options.Filters.Add(new OnlineUserAuthorizationFilter()); // 构建在线用户信息
+                options.Filters.Add(new FunctionAuthorizationFilter()); // 全局功能权限过滤器
+            }).AddNewtonsoftJson(options =>
+            {
+                options.SerializerSettings.ContractResolver = new DefaultContractResolver();
+            }).SetCompatibilityVersion(CompatibilityVersion.Version_3_0);
+#else
             services.AddMvc(options =>
             {
                 options.Conventions.Add(new DashedRoutingConvention());
@@ -47,6 +60,7 @@ namespace OSharp.AspNetCore.Mvc
             {
                 options.SerializerSettings.ContractResolver = new DefaultContractResolver();
             }).SetCompatibilityVersion(CompatibilityVersion.Version_2_2);
+#endif
 
             services.AddScoped<UnitOfWorkFilterImpl>();
             services.AddHttpsRedirection(opts => opts.HttpsPort = 443);
@@ -61,8 +75,33 @@ namespace OSharp.AspNetCore.Mvc
         /// <param name="app">应用程序构建器</param>
         public override void UsePack(IApplicationBuilder app)
         {
+#if NETCOREAPP
+            app.UseRouting();
+            UseCors(app);
+#else   
+            UseCors(app);
             app.UseMvcWithAreaRoute();
+#endif
+
             IsEnabled = true;
+        }
+
+        /// <summary>
+        /// 重写以实现添加Cors服务
+        /// </summary>
+        /// <param name="services">依赖注入服务容器</param>
+        /// <returns></returns>
+        protected virtual IServiceCollection AddCors(IServiceCollection services)
+        {
+            return services;
+        }
+
+        /// <summary>
+        /// 重写以应用Cors
+        /// </summary>
+        protected virtual IApplicationBuilder UseCors(IApplicationBuilder app)
+        {
+            return app;
         }
     }
 }

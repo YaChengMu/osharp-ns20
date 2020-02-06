@@ -127,7 +127,7 @@ namespace OSharp.Core.Functions
             foreach (Type type in functionTypes.OrderBy(m => m.FullName))
             {
                 TFunction controller = GetFunction(type);
-                if (controller == null)
+                if (controller == null || type.HasAttribute<NonFunctionAttribute>())
                 {
                     continue;
                 }
@@ -135,7 +135,14 @@ namespace OSharp.Core.Functions
                 {
                     functions.Add(controller);
                 }
-                MethodInfo[] methods = MethodInfoFinder.FindAll(type);
+
+                List<MethodInfo> methods = MethodInfoFinder.FindAll(type).ToList();
+                // 移除已被重写的方法
+                MethodInfo[] overriddenMethodInfos = methods.Where(m => m.IsOverridden()).ToArray();
+                foreach (MethodInfo overriddenMethodInfo in overriddenMethodInfos)
+                {
+                    methods.RemoveAll(m => m.Name == overriddenMethodInfo.Name && m != overriddenMethodInfo);
+                }
                 foreach (MethodInfo method in methods)
                 {
                     TFunction action = GetFunction(controller, method);
@@ -144,6 +151,10 @@ namespace OSharp.Core.Functions
                         continue;
                     }
                     if (IsIgnoreMethod(action, method, functions))
+                    {
+                        continue;
+                    }
+                    if (HasPickup(functions, action))
                     {
                         continue;
                     }
@@ -211,7 +222,7 @@ namespace OSharp.Core.Functions
         protected virtual bool IsIgnoreMethod(TFunction action, MethodInfo method, IEnumerable<TFunction> functions)
         {
             TFunction exist = GetFunction(functions, action.Area, action.Controller, action.Action, action.Name);
-            return exist != null;
+            return exist != null && method.HasAttribute<NonFunctionAttribute>();
         }
 
         /// <summary>
@@ -240,7 +251,7 @@ namespace OSharp.Core.Functions
                 return;
             }
 
-            TFunction[] dbItems = repository.TrackQuery(null, false).ToArray();
+            TFunction[] dbItems = repository.Query(null, false).ToArray();
 
             //删除的功能
             TFunction[] removeItems = dbItems.Except(functions,
@@ -337,7 +348,7 @@ namespace OSharp.Core.Functions
             {
                 return new TFunction[0];
             }
-            return repository.Query(null, false).ToArray();
+            return repository.QueryAsNoTracking(null, false).ToArray();
         }
 
     }

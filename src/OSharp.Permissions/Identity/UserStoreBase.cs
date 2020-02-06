@@ -1,10 +1,10 @@
 ﻿// -----------------------------------------------------------------------
 //  <copyright file="UserStoreBase.cs" company="OSharp开源团队">
-//      Copyright (c) 2014-2017 OSharp. All rights reserved.
+//      Copyright (c) 2014-2020 OSharp. All rights reserved.
 //  </copyright>
 //  <site>http://www.osharp.org</site>
 //  <last-editor>郭明锋</last-editor>
-//  <last-date>2017-09-05 10:40</last-date>
+//  <last-date>2020-01-31 19:21</last-date>
 // -----------------------------------------------------------------------
 
 using System;
@@ -20,7 +20,6 @@ using Microsoft.AspNetCore.Identity;
 using OSharp.Data;
 using OSharp.Entity;
 using OSharp.EventBuses;
-using OSharp.Extensions;
 using OSharp.Identity.Events;
 
 
@@ -32,12 +31,16 @@ namespace OSharp.Identity
     /// <typeparam name="TUser">用户类型</typeparam>
     /// <typeparam name="TUserKey">用户编号类型</typeparam>
     /// <typeparam name="TUserClaim">用户声明类型</typeparam>
+    /// <typeparam name="TUserClaimKey">用户声明编号类型</typeparam>
     /// <typeparam name="TUserLogin">用户登录类型</typeparam>
+    /// <typeparam name="TUserLoginKey">用户登录编号类型</typeparam>
     /// <typeparam name="TUserToken">用户令牌类型</typeparam>
+    /// <typeparam name="TUserTokenKey">用户令牌编号类型</typeparam>
     /// <typeparam name="TRole">角色类型</typeparam>
     /// <typeparam name="TRoleKey">角色编号类型</typeparam>
     /// <typeparam name="TUserRole">用户角色类型</typeparam>
-    public abstract class UserStoreBase<TUser, TUserKey, TUserClaim, TUserLogin, TUserToken, TRole, TRoleKey, TUserRole>
+    /// <typeparam name="TUserRoleKey">用户角色编号类型</typeparam>
+    public abstract class UserStoreBase<TUser, TUserKey, TUserClaim, TUserClaimKey, TUserLogin, TUserLoginKey, TUserToken, TUserTokenKey, TRole, TRoleKey, TUserRole, TUserRoleKey>
         : IQueryableUserStore<TUser>,
           IUserLoginStore<TUser>,
           IUserClaimStore<TUser>,
@@ -52,25 +55,29 @@ namespace OSharp.Identity
           IUserTwoFactorRecoveryCodeStore<TUser>,
           IUserRoleStore<TUser>
         where TUser : UserBase<TUserKey>
-        where TUserClaim : UserClaimBase<TUserKey>, new()
-        where TUserLogin : UserLoginBase<TUserKey>, new()
-        where TUserToken : UserTokenBase<TUserKey>, new()
-        where TRole : RoleBase<TRoleKey>
-        where TUserRole : UserRoleBase<TUserKey, TRoleKey>, new()
         where TUserKey : IEquatable<TUserKey>
+        where TUserClaim : UserClaimBase<TUserClaimKey, TUserKey>, new()
+        where TUserClaimKey : IEquatable<TUserClaimKey>
+        where TUserLogin : UserLoginBase<TUserLoginKey, TUserKey>, new()
+        where TUserLoginKey : IEquatable<TUserLoginKey>
+        where TUserToken : UserTokenBase<TUserTokenKey, TUserKey>, new()
+        where TUserTokenKey : IEquatable<TUserTokenKey>
+        where TRole : RoleBase<TRoleKey>
         where TRoleKey : IEquatable<TRoleKey>
+        where TUserRole : UserRoleBase<TUserRoleKey, TUserKey, TRoleKey>, new()
+        where TUserRoleKey : IEquatable<TUserRoleKey>
     {
         private readonly IRepository<TUser, TUserKey> _userRepository;
-        private readonly IRepository<TUserLogin, Guid> _userLoginRepository;
-        private readonly IRepository<TUserClaim, int> _userClaimRepository;
-        private readonly IRepository<TUserToken, Guid> _userTokenRepository;
+        private readonly IRepository<TUserLogin, TUserLoginKey> _userLoginRepository;
+        private readonly IRepository<TUserClaim, TUserClaimKey> _userClaimRepository;
+        private readonly IRepository<TUserToken, TUserTokenKey> _userTokenRepository;
         private readonly IRepository<TRole, TRoleKey> _roleRepository;
-        private readonly IRepository<TUserRole, Guid> _userRoleRepository;
+        private readonly IRepository<TUserRole, TUserRoleKey> _userRoleRepository;
         private readonly IEventBus _eventBus;
         private bool _disposed;
 
         /// <summary>
-        /// 初始化一个<see cref="UserStoreBase{TUser, TUserKey, TUserClaim, TUserLogin, TUserToken, TRole, TRoleKey, TUserRole}"/>类型的新实例
+        /// 初始化一个<see cref="UserStoreBase{TUser, TUserKey, TUserClaim, TUserClaimKey, TUserLogin, TUserLoginKey, TUserToken, TUserTokenKey, TRole, TRoleKey, TUserRole, TUserRoleKey}"/>类型的新实例
         /// </summary>
         /// <param name="userRepository">用户仓储</param>
         /// <param name="userLoginRepository">用户登录仓储</param>
@@ -81,11 +88,11 @@ namespace OSharp.Identity
         /// <param name="eventBus">事件总线</param>
         protected UserStoreBase(
             IRepository<TUser, TUserKey> userRepository,
-            IRepository<TUserLogin, Guid> userLoginRepository,
-            IRepository<TUserClaim, int> userClaimRepository,
-            IRepository<TUserToken, Guid> userTokenRepository,
+            IRepository<TUserLogin, TUserLoginKey> userLoginRepository,
+            IRepository<TUserClaim, TUserClaimKey> userClaimRepository,
+            IRepository<TUserToken, TUserTokenKey> userTokenRepository,
             IRepository<TRole, TRoleKey> roleRepository,
-            IRepository<TUserRole, Guid> userRoleRepository,
+            IRepository<TUserRole, TUserRoleKey> userRoleRepository,
             IEventBus eventBus
         )
         {
@@ -104,7 +111,7 @@ namespace OSharp.Identity
         /// Returns an <see cref="T:System.Linq.IQueryable`1" /> collection of users.
         /// </summary>
         /// <value>An <see cref="T:System.Linq.IQueryable`1" /> collection of users.</value>
-        public IQueryable<TUser> Users => _userRepository.TrackQuery();
+        public IQueryable<TUser> Users => _userRepository.Query();
 
         #endregion
 
@@ -214,10 +221,10 @@ namespace OSharp.Identity
             await _userRepository.InsertAsync(user);
 
             //系统的第一个用户，自动成为超级管理员
-            int count = _userRepository.Query().Count();
+            int count = _userRepository.QueryAsNoTracking().Count();
             if (count == 1)
             {
-                TRole adminRole = _roleRepository.Query().FirstOrDefault();
+                TRole adminRole = _roleRepository.QueryAsNoTracking().FirstOrDefault();
                 if (adminRole != null)
                 {
                     TUserRole userRole = new TUserRole() { UserId = user.Id, RoleId = adminRole.Id };
@@ -229,7 +236,7 @@ namespace OSharp.Identity
             }
 
             //默认角色
-            TRole defaultRole = _roleRepository.Query().FirstOrDefault(m => m.IsDefault);
+            TRole defaultRole = _roleRepository.QueryAsNoTracking().FirstOrDefault(m => m.IsDefault);
             if (defaultRole != null)
             {
                 TUserRole userRole = new TUserRole() { UserId = user.Id, RoleId = defaultRole.Id };
@@ -318,7 +325,7 @@ namespace OSharp.Identity
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
 
-            return Task.FromResult(_userRepository.TrackQuery().FirstOrDefault(m => m.NormalizedUserName == normalizedUserName));
+            return Task.FromResult(_userRepository.Query().FirstOrDefault(m => m.NormalizedUserName == normalizedUserName));
         }
 
         #endregion
@@ -383,7 +390,7 @@ namespace OSharp.Identity
             ThrowIfDisposed();
             Check.NotNull(user, nameof(user));
 
-            IList<UserLoginInfo> loginInfos = _userLoginRepository.Query(m => m.UserId.Equals(user.Id)).Select(m =>
+            IList<UserLoginInfo> loginInfos = _userLoginRepository.QueryAsNoTracking(m => m.UserId.Equals(user.Id)).Select(m =>
                 new UserLoginInfo(m.LoginProvider, m.ProviderKey, m.ProviderDisplayName)).ToList();
             return Task.FromResult(loginInfos);
         }
@@ -404,7 +411,7 @@ namespace OSharp.Identity
             Check.NotNullOrEmpty(loginProvider, nameof(loginProvider));
             Check.NotNullOrEmpty(providerKey, nameof(providerKey));
 
-            TUserKey userId = _userLoginRepository.Query(m => m.LoginProvider == loginProvider && m.ProviderKey == providerKey)
+            TUserKey userId = _userLoginRepository.QueryAsNoTracking(m => m.LoginProvider == loginProvider && m.ProviderKey == providerKey)
                 .Select(m => m.UserId).FirstOrDefault();
             if (Equals(userId, default(TUserKey)))
             {
@@ -432,7 +439,7 @@ namespace OSharp.Identity
             ThrowIfDisposed();
             Check.NotNull(user, nameof(user));
 
-            IList<Claim> claims = _userClaimRepository.Query(m => m.UserId.Equals(user.Id))
+            IList<Claim> claims = _userClaimRepository.QueryAsNoTracking(m => m.UserId.Equals(user.Id))
                 .Select(m => new Claim(m.ClaimType, m.ClaimValue)).ToList();
             return Task.FromResult(claims);
         }
@@ -466,7 +473,7 @@ namespace OSharp.Identity
             ThrowIfDisposed();
             Check.NotNull(user, nameof(user));
 
-            List<TUserClaim> userClaims = _userClaimRepository.TrackQuery(m => m.UserId.Equals(user.Id) && m.ClaimType == claim.Type && m.ClaimValue == claim.Value).ToList();
+            List<TUserClaim> userClaims = _userClaimRepository.Query(m => m.UserId.Equals(user.Id) && m.ClaimType == claim.Type && m.ClaimValue == claim.Value).ToList();
             foreach (TUserClaim userClaim in userClaims)
             {
                 userClaim.ClaimType = newClaim.Type;
@@ -507,9 +514,9 @@ namespace OSharp.Identity
             ThrowIfDisposed();
             Check.NotNull(claim, nameof(claim));
 
-            TUserKey[] userIds = _userClaimRepository.Query(m => m.ClaimType == claim.Type && m.ClaimValue == claim.Value)
+            TUserKey[] userIds = _userClaimRepository.QueryAsNoTracking(m => m.ClaimType == claim.Type && m.ClaimValue == claim.Value)
                 .Select(m => m.UserId).ToArray();
-            IList<TUser> users = _userRepository.TrackQuery(m => userIds.Contains(m.Id)).ToList();
+            IList<TUser> users = _userRepository.Query(m => userIds.Contains(m.Id)).ToList();
             return Task.FromResult(users);
         }
 
@@ -690,7 +697,7 @@ namespace OSharp.Identity
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
 
-            TUser user = _userRepository.TrackQuery().FirstOrDefault(m => m.NormalizeEmail == normalizedEmail);
+            TUser user = _userRepository.Query().FirstOrDefault(m => m.NormalizeEmail == normalizedEmail);
             return Task.FromResult(user);
         }
 
@@ -977,7 +984,7 @@ namespace OSharp.Identity
             ThrowIfDisposed();
             Check.NotNull(user, nameof(user));
 
-            TUserToken token = _userTokenRepository.TrackQuery(m => m.UserId.Equals(user.Id) && m.LoginProvider == loginProvider && m.Name == name, false).FirstOrDefault();
+            TUserToken token = _userTokenRepository.Query(m => m.UserId.Equals(user.Id) && m.LoginProvider == loginProvider && m.Name == name, false).FirstOrDefault();
             if (token == null)
             {
                 token = new TUserToken() { UserId = user.Id, LoginProvider = loginProvider, Name = name, Value = value };
@@ -1017,7 +1024,7 @@ namespace OSharp.Identity
             ThrowIfDisposed();
             Check.NotNull(user, nameof(user));
 
-            string value = _userTokenRepository.Query(m => m.UserId.Equals(user.Id) && m.LoginProvider == loginProvider && m.Name == name)
+            string value = _userTokenRepository.QueryAsNoTracking(m => m.UserId.Equals(user.Id) && m.LoginProvider == loginProvider && m.Name == name)
                 .Select(m => m.Value).FirstOrDefault();
             return Task.FromResult(value);
         }
@@ -1034,7 +1041,7 @@ namespace OSharp.Identity
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
             Check.NotNull(user, nameof(user));
-            string[] values = _userTokenRepository.Query(m => m.UserId.Equals(user.Id) && m.LoginProvider == loginProvider)
+            string[] values = _userTokenRepository.QueryAsNoTracking(m => m.UserId.Equals(user.Id) && m.LoginProvider == loginProvider)
                 .Select(m => m.Value).ToArray();
             return Task.FromResult(values);
         }
@@ -1151,7 +1158,7 @@ namespace OSharp.Identity
             Check.NotNull(user, nameof(user));
             Check.NotNullOrEmpty(normalizedRoleName, nameof(normalizedRoleName));
 
-            TRoleKey roleId = _roleRepository.Query(m => m.NormalizedName == normalizedRoleName).Select(m => m.Id).FirstOrDefault();
+            TRoleKey roleId = _roleRepository.QueryAsNoTracking(m => m.NormalizedName == normalizedRoleName).Select(m => m.Id).FirstOrDefault();
             if (Equals(roleId, default(TRoleKey)))
             {
                 throw new InvalidOperationException($"名称为“{normalizedRoleName}”的角色信息不存在");
@@ -1174,7 +1181,7 @@ namespace OSharp.Identity
             Check.NotNull(user, nameof(user));
             Check.NotNullOrEmpty(normalizedRoleName, nameof(normalizedRoleName));
 
-            TRole role = _roleRepository.Query().FirstOrDefault(m => m.NormalizedName == normalizedRoleName);
+            TRole role = _roleRepository.QueryAsNoTracking().FirstOrDefault(m => m.NormalizedName == normalizedRoleName);
             if (role == null)
             {
                 throw new InvalidOperationException($"名称为“{normalizedRoleName}”的角色信息不存在");
@@ -1199,12 +1206,12 @@ namespace OSharp.Identity
             Check.NotNull(user, nameof(user));
 
             IList<string> list = new List<string>();
-            List<TRoleKey> roleIds = _userRoleRepository.Query(m => m.UserId.Equals(user.Id)).Select(m => m.RoleId).ToList();
+            List<TRoleKey> roleIds = _userRoleRepository.QueryAsNoTracking(m => m.UserId.Equals(user.Id)).Select(m => m.RoleId).ToList();
             if (roleIds.Count == 0)
             {
                 return Task.FromResult(list);
             }
-            list = _roleRepository.Query(m => roleIds.Contains(m.Id)).Select(m => m.Name).ToList();
+            list = _roleRepository.QueryAsNoTracking(m => roleIds.Contains(m.Id)).Select(m => m.Name).ToList();
             return Task.FromResult(list);
         }
 
@@ -1224,12 +1231,12 @@ namespace OSharp.Identity
             ThrowIfDisposed();
             Check.NotNull(user, nameof(user));
 
-            TRoleKey roleId = _roleRepository.Query(m => m.NormalizedName == roleName).Select(m => m.Id).FirstOrDefault();
+            TRoleKey roleId = _roleRepository.QueryAsNoTracking(m => m.NormalizedName == roleName).Select(m => m.Id).FirstOrDefault();
             if (Equals(roleId, default(TRoleKey)))
             {
                 throw new InvalidOperationException($"名称为“{roleName}”的角色信息不存在");
             }
-            bool exist = _userRoleRepository.Query(m => m.UserId.Equals(user.Id) && m.RoleId.Equals(roleId)).Any();
+            bool exist = _userRoleRepository.QueryAsNoTracking(m => m.UserId.Equals(user.Id) && m.RoleId.Equals(roleId)).Any();
             return Task.FromResult(exist);
         }
 
@@ -1247,13 +1254,13 @@ namespace OSharp.Identity
             ThrowIfDisposed();
             Check.NotNullOrEmpty(roleName, nameof(roleName));
 
-            TRoleKey roleId = _roleRepository.Query(m => m.NormalizedName == roleName).Select(m => m.Id).FirstOrDefault();
+            TRoleKey roleId = _roleRepository.QueryAsNoTracking(m => m.NormalizedName == roleName).Select(m => m.Id).FirstOrDefault();
             if (Equals(roleId, default(TRoleKey)))
             {
                 throw new InvalidOperationException($"名称为“{roleName}”的角色信息不存在");
             }
-            List<TUserKey> userIds = _userRoleRepository.Query(m => m.RoleId.Equals(roleId)).Select(m => m.UserId).ToList();
-            IList<TUser> users = _userRepository.TrackQuery(m => userIds.Contains(m.Id)).ToList();
+            List<TUserKey> userIds = _userRoleRepository.QueryAsNoTracking(m => m.RoleId.Equals(roleId)).Select(m => m.UserId).ToList();
+            IList<TUser> users = _userRepository.Query(m => userIds.Contains(m.Id)).ToList();
             return Task.FromResult(users);
         }
 

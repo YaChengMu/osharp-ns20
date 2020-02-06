@@ -1,10 +1,10 @@
 ﻿// -----------------------------------------------------------------------
 //  <copyright file="UserClaimBase.cs" company="OSharp开源团队">
-//      Copyright (c) 2014-2017 OSharp. All rights reserved.
+//      Copyright (c) 2014-2020 OSharp. All rights reserved.
 //  </copyright>
 //  <site>http://www.osharp.org</site>
 //  <last-editor>郭明锋</last-editor>
-//  <last-date>2017-09-04 21:31</last-date>
+//  <last-date>2020-01-31 19:16</last-date>
 // -----------------------------------------------------------------------
 
 using System;
@@ -20,9 +20,11 @@ namespace OSharp.Identity
     /// <summary>
     /// 用户声明基类
     /// </summary>
+    /// <typeparam name="TKey">用户声明编号类型</typeparam>
     /// <typeparam name="TUserKey">用户编号类型</typeparam>
-    public abstract class UserClaimBase<TUserKey> : EntityBase<int>
+    public abstract class UserClaimBase<TKey, TUserKey> : EntityBase<TKey>
         where TUserKey : IEquatable<TUserKey>
+        where TKey : IEquatable<TKey>
     {
         /// <summary>
         /// 获取或设置 用户编号
