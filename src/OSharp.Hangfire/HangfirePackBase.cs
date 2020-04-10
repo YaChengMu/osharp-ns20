@@ -48,17 +48,6 @@ namespace OSharp.Hangfire
         /// <returns></returns>
         public override IServiceCollection AddServices(IServiceCollection services)
         {
-            IConfiguration configuration = services.GetConfiguration();
-#if NETCOREAPP
-            bool enabled = false;
-#else
-            bool enabled = configuration["OSharp:Hangfire:Enabled"].CastTo(false);
-#endif
-            if (!enabled)
-            {
-                return services;
-            }
-
             Action<IGlobalConfiguration> hangfireAction = GetHangfireAction(services);
             services.AddHangfire(hangfireAction);
             return services;
@@ -72,15 +61,6 @@ namespace OSharp.Hangfire
         {
             IServiceProvider serviceProvider = app.ApplicationServices;
             IConfiguration configuration = serviceProvider.GetService<IConfiguration>();
-#if NETCOREAPP
-            bool enabled = false;
-#else
-            bool enabled = configuration["OSharp:Hangfire:Enabled"].CastTo(false);
-#endif
-            if (!enabled)
-            {
-                return;
-            }
 
             IGlobalConfiguration globalConfiguration = serviceProvider.GetService<IGlobalConfiguration>();
             globalConfiguration.UseLogProvider(new AspNetCoreLogProvider(serviceProvider.GetService<ILoggerFactory>()));

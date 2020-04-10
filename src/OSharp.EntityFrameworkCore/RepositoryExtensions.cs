@@ -9,7 +9,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
 
@@ -117,11 +116,8 @@ namespace OSharp.Entity
             {
                 throw new OsharpException($"参数dbContext类型为“{dbContext.GetType()}”，不能转换为 DbContext");
             }
-#if NETSTANDARD2_1
+
             return context.Set<TEntity>().FromSqlRaw(sql, parameters);
-#else
-            return context.Set<TEntity>().FromSql(new RawSqlString(sql), parameters);
-#endif
         }
     }
 }

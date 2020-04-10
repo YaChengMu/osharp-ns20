@@ -8,11 +8,9 @@
 // -----------------------------------------------------------------------
 
 using System;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Linq.Expressions;
-using System.Security.Claims;
 using System.Threading.Tasks;
 
 using Liuliu.Demo.Identity;
@@ -26,11 +24,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 using OSharp.AspNetCore;
-using OSharp.AspNetCore.Mvc;
 using OSharp.AspNetCore.Mvc.Filters;
 using OSharp.AspNetCore.UI;
-using OSharp.Core;
-using OSharp.Core.Modules;
+using OSharp.Authorization;
+using OSharp.Authorization.Modules;
 using OSharp.Data;
 using OSharp.Entity;
 using OSharp.Extensions;
@@ -41,14 +38,13 @@ using OSharp.Identity.OAuth2;
 using OSharp.Json;
 using OSharp.Mapping;
 using OSharp.Net;
-using OSharp.Security.Claims;
 
 
 namespace Liuliu.Demo.Web.Controllers
 {
     [Description("网站-认证")]
     [ModuleInfo(Order = 1)]
-    public class IdentityController : ApiController
+    public class IdentityController : SiteApiController
     {
         private readonly IIdentityContract _identityContract;
         private readonly SignInManager<User> _signInManager;
@@ -75,11 +71,7 @@ namespace Liuliu.Demo.Web.Controllers
         [Description("用户名是否存在")]
         public bool CheckUserNameExists(string userName)
         {
-#if !NETCOREAPP2_2
             bool exists = _userManager.Users.Any(m => m.NormalizedUserName == _userManager.NormalizeName(userName));
-#else
-            bool exists = _userManager.Users.Any(m => m.NormalizedUserName == _userManager.NormalizeKey(userName));
-#endif
             return exists;
         }
 
@@ -92,11 +84,7 @@ namespace Liuliu.Demo.Web.Controllers
         [Description("用户Email是否存在")]
         public bool CheckEmailExists(string email)
         {
-#if !NETCOREAPP2_2
             bool exists = _userManager.Users.Any(m => m.NormalizeEmail == _userManager.NormalizeEmail(email));
-#else
-            bool exists = _userManager.Users.Any(m => m.NormalizeEmail == _userManager.NormalizeKey(email));
-#endif
             return exists;
         }
 
@@ -208,47 +196,13 @@ namespace Liuliu.Demo.Web.Controllers
         }
 
         /// <summary>
-        /// Jwt登录
-        /// </summary>
-        /// <param name="dto">登录信息</param>
-        /// <returns>JSON操作结果</returns>
-        [HttpPost]
-        [ModuleInfo]
-        [Description("JWT登录")]
-        public async Task<AjaxResult> Jwtoken(LoginDto dto)
-        {
-            Check.NotNull(dto, nameof(dto));
-
-            if (!ModelState.IsValid)
-            {
-                return new AjaxResult("提交信息验证失败", AjaxResultType.Error);
-            }
-
-            dto.Ip = HttpContext.GetClientIp();
-            dto.UserAgent = Request.Headers["User-Agent"].FirstOrDefault();
-
-            OperationResult<User> result = await _identityContract.Login(dto);
-            IUnitOfWork unitOfWork = HttpContext.RequestServices.GetUnitOfWork<User, int>();
-            unitOfWork.Commit();
-
-            if (!result.Succeeded)
-            {
-                return result.ToAjaxResult();
-            }
-
-            User user = result.Data;
-            JsonWebToken token = await CreateJwtToken(user);
-            return new AjaxResult("登录成功", AjaxResultType.Success, token);
-        }
-
-        /// <summary>
         /// 获取身份认证Token
         /// </summary>
         /// <param name="dto">TokenDto</param>
         /// <returns>JSON操作结果</returns>
         [HttpPost]
         [ModuleInfo]
-        [Description("JwtToken")]
+        [Description("Token")]
         public async Task<AjaxResult> Token(TokenDto dto)
         {
             string grantType = dto.GrantType?.UpperToLowerAndSplit("_");
